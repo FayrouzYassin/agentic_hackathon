@@ -11,6 +11,7 @@ import {
   View,
 } from 'react-native';
 import AsyncStorage from '@react-native-async-storage/async-storage';
+import { setAudioModeAsync, useAudioPlayer } from 'expo-audio';
 import * as Haptics from 'expo-haptics';
 import * as ImagePicker from 'expo-image-picker';
 import { DeviceMotion } from 'expo-sensors';
@@ -33,6 +34,7 @@ interface Profile {
 
 const PROFILE_KEY = 'medical-alert-profile';
 const LANGUAGE_KEY = 'medical-alert-language';
+const EMERGENCY_SIREN = require('../assets/audio/emergency-siren.mp3');
 
 const DEFAULT_PROFILE: Profile = {
   name: 'Nour Ahmed',
@@ -84,6 +86,8 @@ const copy = {
     instructionTwo: 'Move nearby objects away. Do not restrain them.',
     instructionThree: 'Time the episode and call for help if it continues.',
     callContact: 'Call emergency contact',
+    stopSound: 'Stop emergency sound',
+    soundStopped: 'Emergency sound stopped',
     calling: 'Calling',
     callUnavailable: 'Add an emergency phone number to make calls from the alert screen.',
     editProfile: 'Edit profile',
@@ -138,6 +142,8 @@ const copy = {
     instructionTwo: 'أبعد الأشياء القريبة. لا تحاول تقييده.',
     instructionThree: 'احسب مدة النوبة واطلب المساعدة إذا استمرت.',
     callContact: 'اتصال بجهة الطوارئ',
+    stopSound: 'إيقاف صوت الطوارئ',
+    soundStopped: 'تم إيقاف صوت الطوارئ',
     calling: 'جارٍ الاتصال',
     callUnavailable: 'أضف رقم طوارئ لاستخدام الاتصال من شاشة الطوارئ.',
     editProfile: 'تعديل الملف',
@@ -638,6 +644,8 @@ function AlertScreen({
   const colors = useColors();
   const insets = useSafeAreaInsets();
   const t = copy[language];
+  const sirenPlayer = useAudioPlayer(EMERGENCY_SIREN);
+  const [sirenPlaying, setSirenPlaying] = useState(true);
   const isArabic = language === 'ar';
   const textAlign = isArabic ? 'right' : 'left';
 
@@ -646,6 +654,33 @@ function AlertScreen({
   const bystanderInstruction = t.alertSubtitle;
   // Replace this local starter list with the extra guidance returned by the LLM.
   const extraInstructions = [t.instructionOne, t.instructionTwo, t.instructionThree];
+
+  useEffect(() => {
+    let active = true;
+    void setAudioModeAsync({
+      playsInSilentMode: true,
+      interruptionMode: 'doNotMix',
+    }).then(() => {
+      if (!active) return;
+      sirenPlayer.loop = true;
+      sirenPlayer.volume = 1;
+      sirenPlayer.play();
+    }).catch(() => {
+      // Audio can be blocked by browser autoplay policies; the stop control remains safe.
+    });
+
+    return () => {
+      active = false;
+      sirenPlayer.pause();
+      void sirenPlayer.seekTo(0);
+    };
+  }, [sirenPlayer]);
+
+  const stopSiren = () => {
+    sirenPlayer.pause();
+    void sirenPlayer.seekTo(0);
+    setSirenPlaying(false);
+  };
 
   return (
     <View style={[styles.page, { backgroundColor: colors.background }]}>
@@ -760,6 +795,26 @@ function AlertScreen({
             {t.private}
           </Text>
         </View>
+
+        <Pressable
+          testID="stop-emergency-sound"
+          accessibilityRole="button"
+          accessibilityLabel={sirenPlaying ? t.stopSound : t.soundStopped}
+          disabled={!sirenPlaying}
+          onPress={stopSiren}
+          style={({ pressed }) => [
+            styles.stopSoundButton,
+            {
+              borderColor: colors.border,
+              opacity: pressed ? 0.65 : sirenPlaying ? 1 : 0.55,
+            },
+          ]}
+        >
+          <Feather name="volume-x" size={15} color={colors.mutedForeground} />
+          <Text style={[styles.stopSoundText, { color: colors.mutedForeground }]}>
+            {sirenPlaying ? t.stopSound : t.soundStopped}
+          </Text>
+        </Pressable>
       </View>
     </View>
   );
@@ -1476,5 +1531,21 @@ const styles = StyleSheet.create({
   footerTrustText: {
     fontFamily: 'Cairo_400Regular',
     fontSize: 11,
+  },
+  stopSoundButton: {
+    alignItems: 'center',
+    alignSelf: 'center',
+    borderRadius: 14,
+    borderWidth: 1,
+    flexDirection: 'row',
+    gap: 7,
+    justifyContent: 'center',
+    marginTop: 10,
+    minHeight: 42,
+    paddingHorizontal: 14,
+  },
+  stopSoundText: {
+    fontFamily: 'Cairo_700Bold',
+    fontSize: 12,
   },
 });
