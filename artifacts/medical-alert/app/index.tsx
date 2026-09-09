@@ -625,7 +625,7 @@ function AlertScreen({
           </View>
           <View style={styles.alertPerson}>
             <View style={[styles.alertAvatarRing, { borderColor: colors.coralSoft }]}>
-              <Avatar profile={profile} colors={colors} size={86} />
+              <Avatar profile={profile} colors={colors} size={78} />
             </View>
             <Text style={[styles.alertName, { color: colors.primaryForeground, textAlign }]}>
               {profile.name || (isArabic ? 'الاسم غير مضاف' : 'Name not added')}
@@ -1156,9 +1156,9 @@ const styles = StyleSheet.create({
   alertCard: {
     borderRadius: 27,
     marginTop: 16,
-    minHeight: 215,
+    minHeight: 195,
     overflow: 'hidden',
-    padding: 16,
+    padding: 14,
   },
   alertCardTop: {
     alignItems: 'center',
@@ -1186,8 +1186,8 @@ const styles = StyleSheet.create({
   },
   alertName: {
     fontFamily: 'Cairo_700Bold',
-    fontSize: 21,
-    marginTop: 8,
+    fontSize: 19,
+    marginTop: 6,
   },
   callButton: {
     alignItems: 'center',
@@ -1216,7 +1216,7 @@ const styles = StyleSheet.create({
     borderWidth: 1,
     marginTop: 11,
     paddingHorizontal: 14,
-    paddingVertical: 11,
+    paddingVertical: 8,
   },
   extraInstructionsHeader: {
     alignItems: 'center',
@@ -1227,13 +1227,13 @@ const styles = StyleSheet.create({
   extraInstructionsTitle: {
     flex: 1,
     fontFamily: 'Cairo_700Bold',
-    fontSize: 13,
+    fontSize: 14,
   },
   extraInstructionRow: {
     alignItems: 'flex-start',
     flexDirection: 'row',
     gap: 9,
-    marginTop: 5,
+    marginTop: 4,
   },
   extraInstructionDot: {
     borderRadius: 3,
@@ -1244,8 +1244,8 @@ const styles = StyleSheet.create({
   extraInstructionText: {
     flex: 1,
     fontFamily: 'Cairo_400Regular',
-    fontSize: 11,
-    lineHeight: 16,
+    fontSize: 13,
+    lineHeight: 19,
   },
   footerTrust: {
     alignItems: 'center',
