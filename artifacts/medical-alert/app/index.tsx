@@ -15,7 +15,6 @@ import * as Haptics from 'expo-haptics';
 import * as ImagePicker from 'expo-image-picker';
 import { Image } from 'expo-image';
 import { Feather, MaterialCommunityIcons } from '@expo/vector-icons';
-import { LinearGradient } from 'expo-linear-gradient';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { KeyboardAwareScrollViewCompat } from '@/components/KeyboardAwareScrollViewCompat';
 import { useColors } from '@/hooks/useColors';
@@ -74,10 +73,8 @@ const copy = {
       'Allow photo access to choose a picture from your library.',
     cameraPermission: 'Allow camera access to take your profile picture.',
     openSettings: 'Open settings',
-    alertEyebrow: 'FOR BYSTANDERS',
-    alertTitle: 'This person may need help.',
-    alertSubtitle:
-      'Stay calm and follow the steps below. Their care team has prepared this profile.',
+    alertTitle: 'I have',
+    alertSubtitle: 'Keep the area clear and stay with me until help arrives.',
     verified: 'PROFILE READY',
     conditionLabel: 'CONDITION',
     whatToDo: 'What to do',
@@ -121,10 +118,8 @@ const copy = {
     libraryPermission: 'اسمح بالوصول إلى الصور لاختيار صورة من مكتبتك.',
     cameraPermission: 'اسمح بالوصول إلى الكاميرا لالتقاط صورة الملف الشخصي.',
     openSettings: 'فتح الإعدادات',
-    alertEyebrow: 'للمساعدة من حولك',
-    alertTitle: 'هذا الشخص قد يحتاج إلى مساعدة.',
-    alertSubtitle:
-      'حافظ على هدوئك واتبع الخطوات التالية. تم تجهيز هذا الملف بواسطة فريق الرعاية.',
+    alertTitle: 'لدي',
+    alertSubtitle: 'أبعد الأشياء من حولي وابقَ بجانبي حتى تصل المساعدة.',
     verified: 'الملف جاهز',
     conditionLabel: 'الحالة الصحية',
     whatToDo: 'ما يجب فعله',
@@ -582,19 +577,20 @@ function AlertScreen({
   const isArabic = language === 'ar';
   const textAlign = isArabic ? 'right' : 'left';
 
-  const instructions = [t.instructionOne, t.instructionTwo, t.instructionThree];
+  const condition = profile.condition || (isArabic ? 'حالة صحية' : 'a medical condition');
+  // Replace this local starter copy with the concise instruction returned by the LLM.
+  const bystanderInstruction = t.alertSubtitle;
 
   return (
     <View style={[styles.page, { backgroundColor: colors.background }]}>
-      <KeyboardAwareScrollViewCompat
-        contentContainerStyle={[
-          styles.scrollContent,
+      <View
+        style={[
+          styles.fixedAlertContent,
           {
             paddingTop: Math.max(insets.top, Platform.OS === 'web' ? 67 : 18) + 8,
-            paddingBottom: Math.max(insets.bottom, Platform.OS === 'web' ? 34 : 22) + 22,
+            paddingBottom: Math.max(insets.bottom, Platform.OS === 'web' ? 34 : 22) + 12,
           },
         ]}
-        showsVerticalScrollIndicator={false}
       >
         <View style={[styles.topBar, isArabic && styles.rowReverse]}>
           <Pressable
@@ -611,77 +607,26 @@ function AlertScreen({
         </View>
 
         <View style={[styles.alertIntro, isArabic && { alignItems: 'flex-end' }]}>
-          <View style={[styles.alertPill, { backgroundColor: colors.coralSoft }, isArabic && styles.rowReverse]}>
-            <View style={[styles.pillDot, { backgroundColor: colors.primary }]} />
-            <Text style={[styles.alertPillText, { color: colors.accentForeground }]}>
-              {t.alertEyebrow}
-            </Text>
-          </View>
           <Text style={[styles.alertTitle, { color: colors.tealDeep, textAlign }]}>
-            {t.alertTitle}
+            {t.alertTitle} {condition}
           </Text>
           <Text style={[styles.alertSubtitle, { color: colors.mutedForeground, textAlign }]}>
-            {t.alertSubtitle}
+            {bystanderInstruction}
           </Text>
         </View>
 
-        <LinearGradient
-          colors={[colors.tealDeep, colors.teal]}
-          start={{ x: 0, y: 0 }}
-          end={{ x: 1, y: 1 }}
-          style={styles.alertCard}
-        >
+        <View style={[styles.alertCard, { backgroundColor: colors.primary }]}>
           <View style={[styles.alertCardTop, isArabic && styles.rowReverse]}>
-            <View style={[styles.readyPill, isArabic && styles.rowReverse]}>
-              <Feather name="shield" size={13} color={colors.sage} />
-              <Text style={[styles.readyText, { color: colors.sage }]}>{t.verified}</Text>
-            </View>
-            <MaterialCommunityIcons name="heart-pulse" size={25} color={colors.sage} />
+            <MaterialCommunityIcons name="heart-pulse" size={25} color={colors.coralSoft} />
           </View>
-
           <View style={styles.alertPerson}>
-            <View style={[styles.alertAvatarRing, { borderColor: colors.accent }]}>
-              <Avatar profile={profile} colors={colors} size={102} />
+            <View style={[styles.alertAvatarRing, { borderColor: colors.coralSoft }]}>
+              <Avatar profile={profile} colors={colors} size={86} />
             </View>
             <Text style={[styles.alertName, { color: colors.primaryForeground, textAlign }]}>
               {profile.name || (isArabic ? 'الاسم غير مضاف' : 'Name not added')}
             </Text>
-            <Text style={[styles.alertConditionLabel, { color: colors.sage }]}>
-              {t.conditionLabel}
-            </Text>
-            <Text style={[styles.alertCondition, { color: colors.primaryForeground, textAlign }]}>
-              {profile.condition || (isArabic ? 'لم تتم الإضافة' : 'Not added yet')}
-            </Text>
           </View>
-        </LinearGradient>
-
-        <View style={[styles.instructionsCard, { backgroundColor: colors.card, borderColor: colors.border }]}>
-          <View style={[styles.instructionsHeading, isArabic && styles.rowReverse]}>
-            <View style={[styles.instructionsTitleWrap, isArabic && { alignItems: 'flex-end' }]}>
-              <Text style={[styles.cardEyebrow, { color: colors.mutedForeground, textAlign }]}>
-                {t.medicalId}
-              </Text>
-              <Text style={[styles.instructionsTitle, { color: colors.tealDeep, textAlign }]}>
-                {t.whatToDo}
-              </Text>
-            </View>
-            <IconBadge backgroundColor={colors.sage} size={40}>
-              <Feather name="info" size={18} color={colors.teal} />
-            </IconBadge>
-          </View>
-
-          {instructions.map((instruction, index) => (
-            <View key={instruction} style={[styles.instructionRow, isArabic && styles.rowReverse]}>
-              <View style={[styles.instructionNumber, { backgroundColor: colors.coralSoft }]}>
-                <Text style={[styles.instructionNumberText, { color: colors.primary }]}>
-                  {index + 1}
-                </Text>
-              </View>
-              <Text style={[styles.instructionText, { color: colors.tealDeep, textAlign }]}>
-                {instruction}
-              </Text>
-            </View>
-          ))}
         </View>
 
         <Pressable
@@ -712,7 +657,7 @@ function AlertScreen({
             {t.private}
           </Text>
         </View>
-      </KeyboardAwareScrollViewCompat>
+      </View>
     </View>
   );
 }
@@ -794,7 +739,7 @@ export default function MedicalAlertHome() {
       return;
     }
     const result = await ImagePicker.launchImageLibraryAsync({
-      mediaTypes: ImagePicker.MediaTypeOptions.Images,
+      mediaTypes: ['images'],
       allowsEditing: true,
       aspect: [1, 1],
       quality: 0.85,
@@ -813,7 +758,7 @@ export default function MedicalAlertHome() {
       return;
     }
     const result = await ImagePicker.launchCameraAsync({
-      mediaTypes: ImagePicker.MediaTypeOptions.Images,
+      mediaTypes: ['images'],
       allowsEditing: true,
       aspect: [1, 1],
       quality: 0.85,
@@ -877,6 +822,10 @@ const styles = StyleSheet.create({
     flex: 1,
   },
   scrollContent: {
+    paddingHorizontal: 22,
+  },
+  fixedAlertContent: {
+    flex: 1,
     paddingHorizontal: 22,
   },
   topBar: {
@@ -1149,45 +1098,26 @@ const styles = StyleSheet.create({
   },
   alertIntro: {
     alignItems: 'flex-start',
-    marginTop: 35,
-  },
-  alertPill: {
-    alignItems: 'center',
-    borderRadius: 16,
-    flexDirection: 'row',
-    gap: 7,
-    paddingHorizontal: 10,
-    paddingVertical: 6,
-  },
-  pillDot: {
-    borderRadius: 5,
-    height: 8,
-    width: 8,
-  },
-  alertPillText: {
-    fontFamily: 'Cairo_700Bold',
-    fontSize: 10,
-    letterSpacing: 1,
+    marginTop: 22,
   },
   alertTitle: {
     fontFamily: 'Cairo_700Bold',
-    fontSize: 28,
+    fontSize: 26,
     letterSpacing: -0.8,
-    lineHeight: 37,
-    marginTop: 13,
+    lineHeight: 34,
   },
   alertSubtitle: {
     fontFamily: 'Cairo_400Regular',
-    fontSize: 14,
-    lineHeight: 22,
-    marginTop: 6,
+    fontSize: 13,
+    lineHeight: 19,
+    marginTop: 4,
   },
   alertCard: {
     borderRadius: 27,
-    marginTop: 23,
-    minHeight: 282,
+    marginTop: 16,
+    minHeight: 215,
     overflow: 'hidden',
-    padding: 20,
+    padding: 16,
   },
   alertCardTop: {
     alignItems: 'center',
@@ -1206,7 +1136,7 @@ const styles = StyleSheet.create({
   },
   alertPerson: {
     alignItems: 'center',
-    marginTop: 12,
+    marginTop: 4,
   },
   alertAvatarRing: {
     borderRadius: 62,
@@ -1215,70 +1145,15 @@ const styles = StyleSheet.create({
   },
   alertName: {
     fontFamily: 'Cairo_700Bold',
-    fontSize: 24,
-    marginTop: 10,
-  },
-  alertConditionLabel: {
-    fontFamily: 'Cairo_700Bold',
-    fontSize: 9,
-    letterSpacing: 1.3,
-    marginTop: 2,
-  },
-  alertCondition: {
-    fontFamily: 'Cairo_600SemiBold',
-    fontSize: 16,
-    marginTop: 1,
-  },
-  instructionsCard: {
-    borderRadius: 23,
-    borderWidth: 1,
-    marginTop: 16,
-    padding: 19,
-  },
-  instructionsHeading: {
-    alignItems: 'center',
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    marginBottom: 17,
-  },
-  instructionsTitleWrap: {
-    alignItems: 'flex-start',
-  },
-  instructionsTitle: {
-    fontFamily: 'Cairo_700Bold',
     fontSize: 21,
-    marginTop: 3,
-  },
-  instructionRow: {
-    alignItems: 'flex-start',
-    flexDirection: 'row',
-    gap: 12,
-    marginTop: 13,
-  },
-  instructionNumber: {
-    alignItems: 'center',
-    borderRadius: 14,
-    height: 28,
-    justifyContent: 'center',
-    width: 28,
-  },
-  instructionNumberText: {
-    fontFamily: 'Cairo_700Bold',
-    fontSize: 12,
-  },
-  instructionText: {
-    flex: 1,
-    fontFamily: 'Cairo_400Regular',
-    fontSize: 13,
-    lineHeight: 20,
-    paddingTop: 2,
+    marginTop: 8,
   },
   callButton: {
     alignItems: 'center',
     borderRadius: 20,
     flexDirection: 'row',
-    marginTop: 16,
-    minHeight: 72,
+    marginTop: 13,
+    minHeight: 62,
     paddingHorizontal: 14,
   },
   callButtonCopy: {
@@ -1300,7 +1175,7 @@ const styles = StyleSheet.create({
     alignSelf: 'center',
     flexDirection: 'row',
     gap: 6,
-    marginTop: 18,
+    marginTop: 10,
   },
   footerTrustText: {
     fontFamily: 'Cairo_400Regular',
