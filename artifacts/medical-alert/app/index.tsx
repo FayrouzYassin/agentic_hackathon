@@ -78,6 +78,7 @@ const copy = {
     verified: 'PROFILE READY',
     conditionLabel: 'CONDITION',
     whatToDo: 'What to do',
+    extraInstructions: 'Additional guidance',
     instructionOne: 'Stay with them and keep the area calm.',
     instructionTwo: 'Move nearby objects away. Do not restrain them.',
     instructionThree: 'Time the episode and call for help if it continues.',
@@ -123,6 +124,7 @@ const copy = {
     verified: 'الملف جاهز',
     conditionLabel: 'الحالة الصحية',
     whatToDo: 'ما يجب فعله',
+    extraInstructions: 'إرشادات إضافية',
     instructionOne: 'ابقَ بجانبه وحافظ على هدوء المكان.',
     instructionTwo: 'أبعد الأشياء القريبة. لا تحاول تقييده.',
     instructionThree: 'احسب مدة النوبة واطلب المساعدة إذا استمرت.',
@@ -580,6 +582,8 @@ function AlertScreen({
   const condition = profile.condition || (isArabic ? 'حالة صحية' : 'a medical condition');
   // Replace this local starter copy with the concise instruction returned by the LLM.
   const bystanderInstruction = t.alertSubtitle;
+  // Replace this local starter list with the extra guidance returned by the LLM.
+  const extraInstructions = [t.instructionOne, t.instructionTwo, t.instructionThree];
 
   return (
     <View style={[styles.page, { backgroundColor: colors.background }]}>
@@ -650,6 +654,43 @@ function AlertScreen({
           </View>
           <Feather name={isArabic ? 'arrow-left' : 'arrow-right'} size={20} color={colors.primaryForeground} />
         </Pressable>
+
+        <View
+          style={[
+            styles.extraInstructionsCard,
+            { backgroundColor: colors.card, borderColor: colors.border },
+          ]}
+        >
+          <View style={[styles.extraInstructionsHeader, isArabic && styles.rowReverse]}>
+            <IconBadge backgroundColor={colors.sage} size={32}>
+              <Feather name="info" size={15} color={colors.teal} />
+            </IconBadge>
+            <Text
+              style={[
+                styles.extraInstructionsTitle,
+                { color: colors.tealDeep, textAlign },
+              ]}
+            >
+              {t.extraInstructions}
+            </Text>
+          </View>
+          {extraInstructions.map((instruction) => (
+            <View
+              key={instruction}
+              style={[styles.extraInstructionRow, isArabic && styles.rowReverse]}
+            >
+              <View style={[styles.extraInstructionDot, { backgroundColor: colors.primary }]} />
+              <Text
+                style={[
+                  styles.extraInstructionText,
+                  { color: colors.mutedForeground, textAlign },
+                ]}
+              >
+                {instruction}
+              </Text>
+            </View>
+          ))}
+        </View>
 
         <View style={[styles.footerTrust, isArabic && styles.rowReverse]}>
           <Feather name="lock" size={14} color={colors.mutedForeground} />
@@ -1169,6 +1210,42 @@ const styles = StyleSheet.create({
     fontFamily: 'Cairo_400Regular',
     fontSize: 12,
     marginTop: 1,
+  },
+  extraInstructionsCard: {
+    borderRadius: 18,
+    borderWidth: 1,
+    marginTop: 11,
+    paddingHorizontal: 14,
+    paddingVertical: 11,
+  },
+  extraInstructionsHeader: {
+    alignItems: 'center',
+    flexDirection: 'row',
+    gap: 9,
+    marginBottom: 4,
+  },
+  extraInstructionsTitle: {
+    flex: 1,
+    fontFamily: 'Cairo_700Bold',
+    fontSize: 13,
+  },
+  extraInstructionRow: {
+    alignItems: 'flex-start',
+    flexDirection: 'row',
+    gap: 9,
+    marginTop: 5,
+  },
+  extraInstructionDot: {
+    borderRadius: 3,
+    height: 6,
+    marginTop: 7,
+    width: 6,
+  },
+  extraInstructionText: {
+    flex: 1,
+    fontFamily: 'Cairo_400Regular',
+    fontSize: 11,
+    lineHeight: 16,
   },
   footerTrust: {
     alignItems: 'center',
