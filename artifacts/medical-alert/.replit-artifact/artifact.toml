@@ -1,0 +1,24 @@
+kind = "mobile"
+previewPath = "/medical-alert/"
+title = "Medical Alert"
+description = "A bilingual Arabic and English medical alert app for people with chronic conditions, helping bystanders identify the person, follow condition-specific guidance, and contact an emergency contact quickly."
+version = "1.0.0"
+id = "artifacts/medical-alert"
+router = "expo-domain"
+
+[[services]]
+name = "expo"
+ensurePreviewReachable = "/status"
+paths = [ "/medical-alert/" ]
+localPort = 18803
+
+[services.development]
+run = "pnpm --filter @workspace/medical-alert run dev"
+
+[services.production]
+build = [ "pnpm", "--filter", "@workspace/medical-alert", "run", "build" ]
+run = [ "pnpm", "--filter", "@workspace/medical-alert", "run", "serve" ]
+
+[services.env]
+PORT = "18803"
+BASE_PATH = "/medical-alert/"
