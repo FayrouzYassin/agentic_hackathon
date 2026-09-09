@@ -1,4 +1,4 @@
-import React, { useEffect, useMemo, useState } from 'react';
+import React, { useEffect, useMemo, useRef, useState } from 'react';
 import {
   Alert,
   Linking,
@@ -13,6 +13,7 @@ import {
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import * as Haptics from 'expo-haptics';
 import * as ImagePicker from 'expo-image-picker';
+import { DeviceMotion } from 'expo-sensors';
 import { Image } from 'expo-image';
 import { Feather, MaterialCommunityIcons } from '@expo/vector-icons';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
@@ -88,6 +89,14 @@ const copy = {
     editProfile: 'Edit profile',
     private: 'Private by design',
     medicalId: 'Medical ID',
+    shakeToAlert: 'Shake to alert',
+    shakeDescription: 'Enable a safety shortcut: three strong jolts in quick succession open the emergency screen.',
+    enableShake: 'Enable shake detection',
+    shakeEnabled: 'Shake detection enabled',
+    shakePermissionTitle: 'Motion access needed',
+    shakePermissionBody: 'Allow motion access to use shake-to-alert.',
+    shakeUnavailableTitle: 'Motion is unavailable',
+    shakeUnavailableBody: 'This device does not expose motion sensors.',
   },
   ar: {
     appName: 'ميديكال أليرت',
@@ -134,6 +143,14 @@ const copy = {
     editProfile: 'تعديل الملف',
     private: 'خصوصيتك أولاً',
     medicalId: 'ميديكال آي دي',
+    shakeToAlert: 'التنبيه بالهز',
+    shakeDescription: 'فعّل اختصار الأمان: ثلاث هزات قوية ومتتالية تفتح شاشة الطوارئ.',
+    enableShake: 'تفعيل اكتشاف الهز',
+    shakeEnabled: 'اكتشاف الهز مفعّل',
+    shakePermissionTitle: 'نحتاج إلى صلاحية الحركة',
+    shakePermissionBody: 'اسمح بالوصول إلى الحركة لاستخدام التنبيه بالهز.',
+    shakeUnavailableTitle: 'الحركة غير متاحة',
+    shakeUnavailableBody: 'هذا الجهاز لا يوفّر مستشعرات للحركة.',
   },
 } as const;
 
@@ -311,6 +328,8 @@ function SetupScreen({
   profile,
   setProfile,
   onSave,
+  shakeEnabled,
+  onEnableShake,
   onChoosePhoto,
   onTakePhoto,
   photoMenuVisible,
@@ -321,6 +340,8 @@ function SetupScreen({
   profile: Profile;
   setProfile: React.Dispatch<React.SetStateAction<Profile>>;
   onSave: () => void;
+  shakeEnabled: boolean;
+  onEnableShake: () => void;
   onChoosePhoto: () => void;
   onTakePhoto: () => void;
   photoMenuVisible: boolean;
@@ -466,6 +487,47 @@ function SetupScreen({
             keyboardType="phone-pad"
             textAlign={textAlign}
           />
+        </View>
+
+        <View
+          style={[
+            styles.shakeCard,
+            { backgroundColor: colors.card, borderColor: colors.border },
+          ]}
+        >
+          <View style={[styles.shakeCardHeader, isArabic && styles.rowReverse]}>
+            <IconBadge backgroundColor={colors.coralSoft} size={38}>
+              <MaterialCommunityIcons name="gesture-swipe" size={19} color={colors.primary} />
+            </IconBadge>
+            <View style={[styles.shakeCardCopy, isArabic && { alignItems: 'flex-end' }]}>
+              <Text style={[styles.shakeCardTitle, { color: colors.tealDeep, textAlign }]}>
+                {t.shakeToAlert}
+              </Text>
+              <Text style={[styles.shakeCardDescription, { color: colors.mutedForeground, textAlign }]}>
+                {t.shakeDescription}
+              </Text>
+            </View>
+          </View>
+          <Pressable
+            testID="enable-shake"
+            onPress={onEnableShake}
+            style={({ pressed }) => [
+              styles.shakeButton,
+              {
+                backgroundColor: shakeEnabled ? colors.sage : colors.secondary,
+                opacity: pressed ? 0.72 : 1,
+              },
+            ]}
+          >
+            <Feather
+              name={shakeEnabled ? 'check-circle' : 'activity'}
+              size={16}
+              color={shakeEnabled ? colors.teal : colors.primary}
+            />
+            <Text style={[styles.shakeButtonText, { color: shakeEnabled ? colors.teal : colors.primary }]}>
+              {shakeEnabled ? t.shakeEnabled : t.enableShake}
+            </Text>
+          </Pressable>
         </View>
 
         <View style={[styles.noteRow, isArabic && styles.rowReverse]}>
@@ -708,8 +770,78 @@ export default function MedicalAlertHome() {
   const [screen, setScreen] = useState<Screen>('setup');
   const [profile, setProfile] = useState<Profile>(DEFAULT_PROFILE);
   const [photoMenuVisible, setPhotoMenuVisible] = useState(false);
+  const [shakeEnabled, setShakeEnabled] = useState(false);
+  const shakeTimesRef = useRef<number[]>([]);
+  const lastMagnitudeRef = useRef<number | null>(null);
+  const lastTriggerRef = useRef(0);
   const colors = useColors();
   const t = copy[language];
+
+  useEffect(() => {
+    if (!shakeEnabled) {
+      lastMagnitudeRef.current = null;
+      shakeTimesRef.current = [];
+      return;
+    }
+
+    const registerMotionSample = (x: number, y: number, z: number) => {
+      const magnitude = Math.sqrt(x * x + y * y + z * z);
+      const previousMagnitude = lastMagnitudeRef.current;
+      lastMagnitudeRef.current = magnitude;
+
+      if (previousMagnitude === null) return;
+
+      const rapidChange = Math.abs(magnitude - previousMagnitude);
+      const isHighAccelerationJolt = magnitude >= 15 && rapidChange >= 4;
+      if (!isHighAccelerationJolt) return;
+
+      const now = Date.now();
+      const recentJolts = shakeTimesRef.current.filter((time) => now - time <= 1600);
+      recentJolts.push(now);
+      shakeTimesRef.current = recentJolts;
+
+      const cooldownElapsed = now - lastTriggerRef.current > 5000;
+      if (recentJolts.length >= 3 && cooldownElapsed) {
+        lastTriggerRef.current = now;
+        shakeTimesRef.current = [];
+        setScreen('alert');
+        void Haptics.notificationAsync(Haptics.NotificationFeedbackType.Warning);
+      }
+    };
+
+    if (Platform.OS === 'web') {
+      const browserMotionEvent = (
+        globalThis as typeof globalThis & {
+          DeviceMotionEvent?: {
+            requestPermission?: () => Promise<'granted' | 'denied'>;
+          };
+        }
+      ).DeviceMotionEvent;
+
+      const handleBrowserMotion = (event: DeviceMotionEvent) => {
+        const acceleration = event.acceleration ?? event.accelerationIncludingGravity;
+        if (acceleration) {
+          registerMotionSample(
+            acceleration.x ?? 0,
+            acceleration.y ?? 0,
+            acceleration.z ?? 0,
+          );
+        }
+      };
+
+      window.addEventListener('devicemotion', handleBrowserMotion);
+      return () => window.removeEventListener('devicemotion', handleBrowserMotion);
+    }
+
+    DeviceMotion.setUpdateInterval(100);
+    const subscription = DeviceMotion.addListener((measurement) => {
+      const acceleration =
+        measurement.acceleration ?? measurement.accelerationIncludingGravity;
+      registerMotionSample(acceleration.x, acceleration.y, acceleration.z);
+    });
+
+    return () => subscription.remove();
+  }, [shakeEnabled]);
 
   useEffect(() => {
     let active = true;
@@ -740,6 +872,52 @@ export default function MedicalAlertHome() {
   const handleLanguageChange = (nextLanguage: Language) => {
     setLanguage(nextLanguage);
     void AsyncStorage.setItem(LANGUAGE_KEY, nextLanguage);
+  };
+
+  const handleEnableShake = async () => {
+    if (shakeEnabled) {
+      setShakeEnabled(false);
+      return;
+    }
+
+    try {
+      if (Platform.OS === 'web') {
+        const browserMotionEvent = (
+          globalThis as typeof globalThis & {
+            DeviceMotionEvent?: {
+              requestPermission?: () => Promise<'granted' | 'denied'>;
+            };
+          }
+        ).DeviceMotionEvent;
+
+        if (browserMotionEvent?.requestPermission) {
+          const permission = await browserMotionEvent.requestPermission();
+          if (permission !== 'granted') {
+            Alert.alert(t.shakePermissionTitle, t.shakePermissionBody);
+            return;
+          }
+        }
+      } else {
+        const permission = await DeviceMotion.requestPermissionsAsync();
+        if (!permission.granted) {
+          Alert.alert(t.shakePermissionTitle, t.shakePermissionBody);
+          return;
+        }
+      }
+
+      const available = await DeviceMotion.isAvailableAsync();
+      if (!available) {
+        Alert.alert(t.shakeUnavailableTitle, t.shakeUnavailableBody);
+        return;
+      }
+
+      shakeTimesRef.current = [];
+      lastMagnitudeRef.current = null;
+      setShakeEnabled(true);
+      await Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
+    } catch {
+      Alert.alert(t.shakePermissionTitle, t.shakePermissionBody);
+    }
   };
 
   const handleSave = async () => {
@@ -843,6 +1021,8 @@ export default function MedicalAlertHome() {
       profile={profile}
       setProfile={setProfile}
       onSave={() => void handleSave()}
+      shakeEnabled={shakeEnabled}
+      onEnableShake={() => void handleEnableShake()}
       onChoosePhoto={() => void handleChoosePhoto()}
       onTakePhoto={() => void handleTakePhoto()}
       photoMenuVisible={photoMenuVisible}
@@ -1020,6 +1200,45 @@ const styles = StyleSheet.create({
   },
   form: {
     marginTop: 26,
+  },
+  shakeCard: {
+    borderRadius: 21,
+    borderWidth: 1,
+    marginTop: 2,
+    padding: 14,
+  },
+  shakeCardHeader: {
+    alignItems: 'center',
+    flexDirection: 'row',
+    gap: 10,
+  },
+  shakeCardCopy: {
+    alignItems: 'flex-start',
+    flex: 1,
+  },
+  shakeCardTitle: {
+    fontFamily: 'Cairo_700Bold',
+    fontSize: 14,
+  },
+  shakeCardDescription: {
+    fontFamily: 'Cairo_400Regular',
+    fontSize: 11,
+    lineHeight: 17,
+    marginTop: 2,
+  },
+  shakeButton: {
+    alignItems: 'center',
+    borderRadius: 13,
+    flexDirection: 'row',
+    gap: 7,
+    justifyContent: 'center',
+    marginTop: 12,
+    minHeight: 42,
+    paddingHorizontal: 12,
+  },
+  shakeButtonText: {
+    fontFamily: 'Cairo_700Bold',
+    fontSize: 12,
   },
   fieldWrap: {
     marginBottom: 17,

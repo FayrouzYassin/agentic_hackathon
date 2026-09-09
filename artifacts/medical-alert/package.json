@@ -55,6 +55,7 @@
     "zod-validation-error": "^3.4.0"
   },
   "dependencies": {
-    "@expo-google-fonts/cairo": "^0.4.2"
+    "@expo-google-fonts/cairo": "^0.4.2",
+    "expo-sensors": "^57.0.2"
   }
 }
