@@ -6,6 +6,9 @@
  * OpenAPI spec version: 0.1.0
  */
 
-export interface HealthStatus {
-  status: string;
-}
+export type Language = (typeof Language)[keyof typeof Language];
+
+export const Language = {
+  en: "en",
+  ar: "ar",
+} as const;

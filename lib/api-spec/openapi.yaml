@@ -10,6 +10,10 @@ servers:
 tags:
   - name: health
     description: Health operations
+  - name: users
+    description: Patient profile operations
+  - name: emergency
+    description: Emergency alert operations
 paths:
   /healthz:
     get:
@@ -24,6 +28,104 @@ paths:
             application/json:
               schema:
                 $ref: "#/components/schemas/HealthStatus"
+  /users/setup:
+    post:
+      operationId: setupUser
+      tags: [users]
+      summary: Create a patient profile
+      description: >
+        Stores the patient profile with its photo and asks the model for the
+        bystander instructions. The profile is created even when instruction
+        generation fails; `warning` then explains why and `instructions` is null.
+      requestBody:
+        required: true
+        content:
+          multipart/form-data:
+            schema:
+              $ref: "#/components/schemas/UserSetupRequest"
+      responses:
+        "201":
+          description: Profile created
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/UserResponse"
+        "400":
+          description: Invalid input
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ApiErrorResponse"
+        "413":
+          description: Photo too large
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ApiErrorResponse"
+  /users/{id}:
+    get:
+      operationId: getUser
+      tags: [users]
+      summary: Fetch a patient profile
+      parameters:
+        - name: id
+          in: path
+          required: true
+          description: MongoDB ObjectId of the profile
+          schema:
+            type: string
+      responses:
+        "200":
+          description: Profile found
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/UserResponse"
+        "400":
+          description: Malformed id
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ApiErrorResponse"
+        "404":
+          description: No profile with that id
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ApiErrorResponse"
+  /emergency/trigger:
+    post:
+      operationId: triggerEmergency
+      tags: [emergency]
+      summary: Trigger an emergency alert
+      description: >
+        Returns everything the emergency screen needs, in the patient's language,
+        and notifies the emergency contact through the configured channel.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/EmergencyTriggerRequest"
+      responses:
+        "200":
+          description: Alert triggered
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/EmergencyResponse"
+        "400":
+          description: Malformed user id
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ApiErrorResponse"
+        "404":
+          description: No profile with that id
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ApiErrorResponse"
 components:
   schemas:
     HealthStatus:
@@ -33,4 +135,188 @@ components:
           type: string
       required:
         - status
-
+    Language:
+      type: string
+      enum: [en, ar]
+    ApiErrorResponse:
+      type: object
+      properties:
+        success:
+          type: boolean
+        error:
+          type: string
+          description: Message already translated into the request language
+      required:
+        - success
+        - error
+    EmergencyContact:
+      type: object
+      properties:
+        name:
+          type: string
+        phone:
+          type: string
+        relation:
+          type: string
+      required:
+        - name
+        - phone
+        - relation
+    UserSetupRequest:
+      type: object
+      properties:
+        photo:
+          type: string
+          format: binary
+          description: JPEG/PNG/WebP/HEIC/HEIF, up to MAX_UPLOAD_MB
+        name:
+          type: string
+          minLength: 2
+          maxLength: 80
+        condition:
+          type: string
+          minLength: 5
+          maxLength: 1000
+        language:
+          $ref: "#/components/schemas/Language"
+        contactName:
+          type: string
+          minLength: 2
+          maxLength: 80
+        contactPhone:
+          type: string
+          description: 7-15 digits with an optional leading +
+        contactRelation:
+          type: string
+          minLength: 2
+          maxLength: 40
+      required:
+        - photo
+        - name
+        - condition
+        - contactName
+        - contactPhone
+        - contactRelation
+    UserProfile:
+      type: object
+      properties:
+        id:
+          type: string
+        name:
+          type: string
+        photoUrl:
+          type: string
+          description: Path relative to the API origin, e.g. /uploads/<file>
+        condition:
+          type: string
+        language:
+          $ref: "#/components/schemas/Language"
+        emergencyContact:
+          $ref: "#/components/schemas/EmergencyContact"
+        instructions:
+          type: [string, "null"]
+        instructionsGeneratedAt:
+          type: [string, "null"]
+          format: date-time
+        createdAt:
+          type: string
+          format: date-time
+      required:
+        - id
+        - name
+        - photoUrl
+        - condition
+        - language
+        - emergencyContact
+        - instructions
+    UserResponse:
+      type: object
+      properties:
+        success:
+          type: boolean
+        warning:
+          type: [string, "null"]
+        user:
+          $ref: "#/components/schemas/UserProfile"
+      required:
+        - success
+        - user
+    EmergencyTriggerRequest:
+      type: object
+      properties:
+        userId:
+          type: string
+          description: MongoDB ObjectId of the profile
+      required:
+        - userId
+    EmergencyPatient:
+      type: object
+      properties:
+        id:
+          type: string
+        name:
+          type: string
+        photoUrl:
+          type: string
+      required:
+        - id
+        - name
+        - photoUrl
+    EmergencyCallContact:
+      type: object
+      properties:
+        name:
+          type: string
+        phone:
+          type: string
+        relation:
+          type: string
+        telUri:
+          type: string
+          description: "Ready-to-dial tel: URI"
+      required:
+        - name
+        - phone
+        - relation
+        - telUri
+    ContactNotification:
+      type: object
+      properties:
+        status:
+          type: string
+          enum: [sent, failed, skipped]
+        channel:
+          type: [string, "null"]
+      required:
+        - status
+        - channel
+    EmergencyResponse:
+      type: object
+      properties:
+        success:
+          type: boolean
+        triggeredAt:
+          type: string
+          format: date-time
+        language:
+          $ref: "#/components/schemas/Language"
+        logId:
+          type: [string, "null"]
+        patient:
+          $ref: "#/components/schemas/EmergencyPatient"
+        instructions:
+          type: [string, "null"]
+        warning:
+          type: [string, "null"]
+        emergencyContact:
+          $ref: "#/components/schemas/EmergencyCallContact"
+        contactNotification:
+          $ref: "#/components/schemas/ContactNotification"
+      required:
+        - success
+        - triggeredAt
+        - language
+        - patient
+        - instructions
+        - emergencyContact
+        - contactNotification
