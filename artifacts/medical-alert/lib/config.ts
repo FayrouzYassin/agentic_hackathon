@@ -6,28 +6,37 @@ import Constants from 'expo-constants';
  * the generated client already prefixes every path with `/api`.
  *
  * Set `EXPO_PUBLIC_API_URL` in `artifacts/medical-alert/.env` to point the app
- * at a different server. Only variables prefixed with `EXPO_PUBLIC_` are
- * inlined into the bundle.
+ * at another server. Only variables prefixed with `EXPO_PUBLIC_` are inlined
+ * into the bundle, and they are inlined at build time — restart Expo after
+ * changing one.
  */
 const DEFAULT_PORT = 5000;
+
+/** Loopback alias the Android emulator maps to the host machine. */
+const ANDROID_EMULATOR_HOST = '10.0.2.2';
 
 function stripTrailingSlashes(url: string) {
   return url.replace(/\/+$/, '');
 }
 
 /**
- * On a device, `localhost` is the phone itself, so the packager host is used as
- * a best guess for the machine running the backend. Falls back to `localhost`
- * for web and simulators.
+ * On a device, `localhost` is the phone itself, so the packager host — the LAN
+ * address of the machine running Expo — is the best guess for where the backend
+ * lives. Web and the iOS simulator share the host's loopback, and the Android
+ * emulator reaches it through a dedicated alias.
  */
 function inferDevHost() {
+  if (Platform.OS === 'web') return 'localhost';
+
   const hostUri =
     Constants.expoConfig?.hostUri ??
     (Constants.expoGoConfig as { debuggerHost?: string } | undefined)?.debuggerHost;
+  const packagerHost = hostUri?.split(':')[0];
 
-  const host = hostUri?.split(':')[0];
-  if (host && Platform.OS !== 'web') return host;
-  return 'localhost';
+  if (packagerHost && packagerHost !== 'localhost' && packagerHost !== '127.0.0.1') {
+    return packagerHost;
+  }
+  return Platform.OS === 'android' ? ANDROID_EMULATOR_HOST : 'localhost';
 }
 
 export const API_BASE_URL = stripTrailingSlashes(

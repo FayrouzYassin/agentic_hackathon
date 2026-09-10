@@ -5,7 +5,7 @@ import { KeyboardProvider } from 'react-native-keyboard-controller';
 import { SafeAreaProvider } from 'react-native-safe-area-context';
 import { setBaseUrl } from '@workspace/api-client-react';
 import { ErrorBoundary } from '@/components/ErrorBoundary';
-import { API_BASE_URL } from '@/constants/api';
+import { API_BASE_URL } from '@/lib/config';
 import {
   Cairo_400Regular,
   Cairo_600SemiBold,

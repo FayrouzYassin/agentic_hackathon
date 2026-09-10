@@ -27,7 +27,7 @@ import {
 } from '@workspace/api-client-react';
 import type { EmergencyResponse, UserProfile } from '@workspace/api-client-react';
 import { KeyboardAwareScrollViewCompat } from '@/components/KeyboardAwareScrollViewCompat';
-import { resolveMediaUrl } from '@/constants/api';
+import { resolveMediaUrl } from '@/lib/config';
 import { useColors } from '@/hooks/useColors';
 
 type Language = 'en' | 'ar';
