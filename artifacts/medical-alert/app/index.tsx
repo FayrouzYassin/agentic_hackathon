@@ -34,7 +34,6 @@ interface Profile {
 
 const PROFILE_KEY = 'medical-alert-profile';
 const LANGUAGE_KEY = 'medical-alert-language';
-const EMERGENCY_SIREN = require('../assets/audio/emergency-siren.mp3');
 
 const DEFAULT_PROFILE: Profile = {
   name: 'Nour Ahmed',
@@ -631,12 +630,14 @@ function SetupScreen({
 function AlertScreen({
   language,
   profile,
+  isAlertActive,
   onLanguageChange,
   onEdit,
   onCall,
 }: {
   language: Language;
   profile: Profile;
+  isAlertActive: boolean;
   onLanguageChange: (language: Language) => void;
   onEdit: () => void;
   onCall: () => void;
@@ -644,7 +645,13 @@ function AlertScreen({
   const colors = useColors();
   const insets = useSafeAreaInsets();
   const t = copy[language];
-  const sirenPlayer = useAudioPlayer(EMERGENCY_SIREN);
+  const sirenSource = useMemo(
+    () => require('../assets/audio/emergency-siren.mp3'),
+    [],
+  );
+  const sirenPlayer = useAudioPlayer(sirenSource);
+  const sirenPlayerRef = useRef(sirenPlayer);
+  sirenPlayerRef.current = sirenPlayer;
   const [sirenPlaying, setSirenPlaying] = useState(true);
   const isArabic = language === 'ar';
   const textAlign = isArabic ? 'right' : 'left';
@@ -656,29 +663,50 @@ function AlertScreen({
   const extraInstructions = [t.instructionOne, t.instructionTwo, t.instructionThree];
 
   useEffect(() => {
+    if (!isAlertActive) return;
+
     let active = true;
     void setAudioModeAsync({
       playsInSilentMode: true,
       interruptionMode: 'doNotMix',
     }).then(() => {
       if (!active) return;
-      sirenPlayer.loop = true;
-      sirenPlayer.volume = 1;
-      sirenPlayer.play();
+      const player = sirenPlayerRef.current;
+      try {
+        player.loop = true;
+        player.volume = 1;
+        player.play();
+      } catch {
+        // The player may be released while the alert screen is closing.
+      }
     }).catch(() => {
       // Audio can be blocked by browser autoplay policies; the stop control remains safe.
     });
 
     return () => {
       active = false;
-      sirenPlayer.pause();
-      void sirenPlayer.seekTo(0);
+      try {
+        const player = sirenPlayerRef.current;
+        if (player?.isLoaded) {
+          player.pause();
+          void player.seekTo(0).catch(() => {});
+        }
+      } catch {
+        // expo-audio can finish releasing the player before React cleanup runs.
+      }
     };
-  }, [sirenPlayer]);
+  }, [isAlertActive]);
 
   const stopSiren = () => {
-    sirenPlayer.pause();
-    void sirenPlayer.seekTo(0);
+    try {
+      const player = sirenPlayerRef.current;
+      if (player?.isLoaded) {
+        player.pause();
+        void player.seekTo(0).catch(() => {});
+      }
+    } catch {
+      // Keep the emergency screen usable if audio has already been released.
+    }
     setSirenPlaying(false);
   };
 
@@ -1087,6 +1115,7 @@ export default function MedicalAlertHome() {
     <AlertScreen
       {...sharedProps}
       profile={profile}
+      isAlertActive={screen === 'alert'}
       onEdit={() => setScreen('setup')}
       onCall={() => void handleCall()}
     />
