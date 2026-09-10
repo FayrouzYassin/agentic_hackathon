@@ -216,9 +216,10 @@ Then look at Terminal 1 — you should see the `POST /api/users/setup` request
 arrive. On the alert screen, Claude's steps will replace the three generic
 built-in ones after a moment.
 
-If the photo is missing, the backend rejects the profile (a photo is required),
-the app stays local-only, and you'll see the generic steps instead. That's the
-designed fallback, not a crash.
+A photo is required, so the app asks for one before it sends anything. If the
+server is unreachable the save reports the error and you stay on the setup
+screen; an alert opened later still renders from the cached profile with the
+three generic steps. That's the designed fallback, not a crash.
 
 ---
 
@@ -254,9 +255,7 @@ artifacts/medical-alert/          THE APP — TypeScript + React Native
 │   ├── index.tsx                   both screens live here (~1800 lines)
 │   ├── _layout.tsx                 fonts, navigation shell, error boundary
 │   └── +not-found.tsx              404 screen
-├── lib/
-│   ├── api.ts                      the HTTP client for backend/ — every call
-│   └── config.ts                   works out the backend URL
+├── lib/config.ts                 works out the backend URL, resolves photo URLs
 ├── components/                   error boundary + keyboard helpers
 ├── constants/colors.ts           the colour palette
 ├── hooks/useColors.ts            light/dark theme hook
@@ -276,15 +275,32 @@ untangling the workspace config, which isn't worth the risk mid-hackathon.
 | --- | --- |
 | `artifacts/api-server/` | A TypeScript Express starter. Has one health route |
 | `artifacts/mockup-sandbox/` | A shadcn/ui component preview canvas |
-| `lib/api-spec/` | An OpenAPI spec + Orval codegen config |
-| `lib/api-client-react/` | An API client generated from that spec |
-| `lib/api-zod/` | Zod validation types generated from that spec |
 | `lib/db/` | A Drizzle ORM schema for **PostgreSQL** — not the app's MongoDB |
 | `scripts/`, `attached_assets/` | A sample script and raw source media |
 | `replit.md`, `.replit` | Replit's own project config |
 
 If you're reading the code to understand the app, read `backend/` and
-`artifacts/medical-alert/`. Nothing else.
+`artifacts/medical-alert/`, plus the API contract in `lib/api-spec/`.
+
+### The generated API layer
+
+The app does not hand-write its HTTP calls. `lib/api-spec/openapi.yaml`
+describes the backend's endpoints, and Orval turns that one file into:
+
+| Package | What it holds |
+| --- | --- |
+| `lib/api-client-react/` | `useSetupUser`, `useGetUser`, `useTriggerEmergency` react-query hooks + response types |
+| `lib/api-zod/` | Zod schemas for the same shapes |
+
+After changing an endpoint in `backend/`, update `openapi.yaml` and re-run:
+
+```bash
+pnpm --filter @workspace/api-spec run codegen
+```
+
+The generated files are committed; never edit them by hand. Every request goes
+through `lib/api-client-react/src/custom-fetch.ts`, whose base URL the app sets
+once in `app/_layout.tsx` with `setBaseUrl(API_BASE_URL)`.
 
 ---
 
@@ -442,8 +458,7 @@ Entirely optional for local development.
 
 | Variable | Default | What it does |
 | --- | --- | --- |
-| `EXPO_PUBLIC_API_URL` | auto-detected | Base URL of the backend, no trailing slash |
-| `EXPO_PUBLIC_API_TIMEOUT_MS` | `15000` | How long a backend call may take |
+| `EXPO_PUBLIC_API_URL` | auto-detected | Origin of the backend — no trailing slash, and no `/api` suffix |
 
 > **Two traps with `EXPO_PUBLIC_` variables.**
 >
@@ -485,6 +500,9 @@ Whole workspace — run from the repo root:
 | Command | What it does |
 | --- | --- |
 | `pnpm install` | Install everything under `artifacts/` and `lib/` (not `backend/`) |
+| `pnpm dev:backend` | Start the backend from the root (same as `cd backend && npm run dev`) |
+| `pnpm dev:app` | Start the Expo dev server |
+| `pnpm --filter @workspace/api-spec run codegen` | Regenerate the API hooks and Zod schemas from `openapi.yaml` |
 | `pnpm typecheck` | Typecheck every workspace package |
 | `pnpm build` | Typecheck, then build every workspace package |
 

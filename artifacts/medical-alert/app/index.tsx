@@ -1,4 +1,4 @@
-import React, { useEffect, useMemo, useRef, useState } from 'react';
+import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import {
   Alert,
   Linking,
@@ -18,7 +18,16 @@ import { DeviceMotion } from 'expo-sensors';
 import { Image } from 'expo-image';
 import { Feather, MaterialCommunityIcons } from '@expo/vector-icons';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
+import {
+  ApiError,
+  getGetUserQueryKey,
+  useGetUser,
+  useSetupUser,
+  useTriggerEmergency,
+} from '@workspace/api-client-react';
+import type { EmergencyResponse, UserProfile } from '@workspace/api-client-react';
 import { KeyboardAwareScrollViewCompat } from '@/components/KeyboardAwareScrollViewCompat';
+import { resolveMediaUrl } from '@/lib/config';
 import { useColors } from '@/hooks/useColors';
 
 type Language = 'en' | 'ar';
@@ -30,10 +39,12 @@ interface Profile {
   photoUri: string | null;
   contactName: string;
   contactPhone: string;
+  contactRelation: string;
 }
 
 const PROFILE_KEY = 'medical-alert-profile';
 const LANGUAGE_KEY = 'medical-alert-language';
+const USER_ID_KEY = 'medical-alert-user-id';
 
 const DEFAULT_PROFILE: Profile = {
   name: 'Nour Ahmed',
@@ -41,7 +52,74 @@ const DEFAULT_PROFILE: Profile = {
   photoUri: null,
   contactName: 'Maya Ahmed',
   contactPhone: '+20 10 5555 1488',
+  contactRelation: 'sister',
 };
+
+/** The backend derives the stored extension from the MIME type it receives. */
+const MIME_BY_EXTENSION: Record<string, string> = {
+  jpg: 'image/jpeg',
+  jpeg: 'image/jpeg',
+  png: 'image/png',
+  webp: 'image/webp',
+  heic: 'image/heic',
+  heif: 'image/heif',
+};
+
+function describePhoto(uri: string) {
+  const extension = uri.split(/[?#]/)[0].split('.').pop()?.toLowerCase() ?? '';
+  const type = MIME_BY_EXTENSION[extension];
+  return type ? { name: `photo.${extension}`, type } : { name: 'photo.jpg', type: 'image/jpeg' };
+}
+
+/**
+ * Turns a picked image into something `FormData` can upload. On web the picker
+ * hands back a blob/data URL that has to be read first; on native, React
+ * Native's `FormData` understands the `{ uri, name, type }` shape directly.
+ */
+async function toPhotoUpload(uri: string): Promise<Blob> {
+  const { name, type } = describePhoto(uri);
+
+  if (Platform.OS === 'web') {
+    const response = await fetch(uri);
+    const blob = await response.blob();
+    return blob.type ? blob : new Blob([blob], { type });
+  }
+
+  return { uri, name, type } as unknown as Blob;
+}
+
+function toLocalProfile(user: UserProfile): Profile {
+  return {
+    name: user.name,
+    condition: user.condition,
+    photoUri: resolveMediaUrl(user.photoUrl),
+    contactName: user.emergencyContact.name,
+    contactPhone: user.emergencyContact.phone,
+    contactRelation: user.emergencyContact.relation,
+  };
+}
+
+/** The model returns plain text with one numbered step per line. */
+function parseInstructions(text: string | null | undefined): string[] | null {
+  if (!text) return null;
+  const steps = text
+    .split(/\r?\n/)
+    .map((line) => line.trim())
+    .filter(Boolean);
+  return steps.length > 0 ? steps : null;
+}
+
+/** Prefers the server's already-translated message over a generic fallback. */
+function describeApiError(error: unknown, language: Language) {
+  if (error instanceof ApiError) {
+    const data = error.data as { error?: string } | null;
+    if (data?.error) return data.error;
+  }
+  return language === 'ar'
+    ? 'تعذر الوصول إلى الخادم. تحقق من الاتصال وحاول مرة أخرى.'
+    : 'Could not reach the server. Check your connection and try again.';
+}
+
 
 type ConditionDictionaryEntry = {
   en: string;
@@ -196,9 +274,14 @@ const copy = {
     emergencyContact: 'Emergency contact',
     contactName: 'Contact name',
     contactPhone: 'Phone number',
-    secureNote: 'Your profile stays on this device until you connect your care service.',
+    contactRelation: 'Relationship',
+    contactRelationPlaceholder: 'e.g. sister',
+    secureNote: 'Your profile is stored on your care server so a bystander always sees the latest guidance.',
     previewAlert: 'Save & preview alert',
+    saving: 'Saving…',
     required: 'Please add your name and condition first.',
+    photoRequired: 'Please add a photo so a bystander can recognize you.',
+    saveFailed: 'Could not save profile',
     permissionTitle: 'Photo access needed',
     libraryPermission:
       'Allow photo access to choose a picture from your library.',
@@ -253,9 +336,14 @@ const copy = {
     emergencyContact: 'جهة اتصال للطوارئ',
     contactName: 'اسم جهة الاتصال',
     contactPhone: 'رقم الهاتف',
-    secureNote: 'بياناتك تظل على هذا الجهاز حتى تربط خدمة الرعاية الخاصة بك.',
+    contactRelation: 'صلة القرابة',
+    contactRelationPlaceholder: 'مثال: أخت',
+    secureNote: 'يتم حفظ ملفك على خادم الرعاية حتى تظهر أحدث الإرشادات لمن يساعدك.',
     previewAlert: 'حفظ ومعاينة شاشة الطوارئ',
+    saving: 'جارٍ الحفظ…',
     required: 'من فضلك أضف الاسم والحالة الصحية أولاً.',
+    photoRequired: 'من فضلك أضف صورة حتى يتعرف عليك من يساعدك.',
+    saveFailed: 'تعذر حفظ الملف',
     permissionTitle: 'نحتاج إلى صلاحية الصور',
     libraryPermission: 'اسمح بالوصول إلى الصور لاختيار صورة من مكتبتك.',
     cameraPermission: 'اسمح بالوصول إلى الكاميرا لالتقاط صورة الملف الشخصي.',
@@ -462,6 +550,7 @@ function SetupScreen({
   profile,
   setProfile,
   onSave,
+  saving,
   shakeEnabled,
   onEnableShake,
   onChoosePhoto,
@@ -474,6 +563,7 @@ function SetupScreen({
   profile: Profile;
   setProfile: React.Dispatch<React.SetStateAction<Profile>>;
   onSave: () => void;
+  saving: boolean;
   shakeEnabled: boolean;
   onEnableShake: () => void;
   onChoosePhoto: () => void;
@@ -621,6 +711,15 @@ function SetupScreen({
             keyboardType="phone-pad"
             textAlign={textAlign}
           />
+          <Field
+            label={t.contactRelation}
+            value={profile.contactRelation}
+            onChangeText={(contactRelation) =>
+              setProfile((current) => ({ ...current, contactRelation }))
+            }
+            placeholder={t.contactRelationPlaceholder}
+            textAlign={textAlign}
+          />
         </View>
 
         <View
@@ -674,13 +773,14 @@ function SetupScreen({
         <Pressable
           testID="save-profile"
           onPress={onSave}
+          disabled={saving}
           style={({ pressed }) => [
             styles.primaryButton,
-            { backgroundColor: colors.primary, opacity: pressed ? 0.82 : 1 },
+            { backgroundColor: colors.primary, opacity: pressed || saving ? 0.82 : 1 },
           ]}
         >
           <Text style={[styles.primaryButtonText, { color: colors.primaryForeground }]}>
-            {t.previewAlert}
+            {saving ? t.saving : t.previewAlert}
           </Text>
           <Feather
             name={isArabic ? 'arrow-left' : 'arrow-right'}
@@ -760,6 +860,7 @@ function AlertScreen({
   language,
   profile,
   isAlertActive,
+  instructions,
   onLanguageChange,
   onEdit,
   onCall,
@@ -767,6 +868,7 @@ function AlertScreen({
   language: Language;
   profile: Profile;
   isAlertActive: boolean;
+  instructions: string[] | null;
   onLanguageChange: (language: Language) => void;
   onEdit: () => void;
   onCall: () => void;
@@ -790,8 +892,12 @@ function AlertScreen({
     (isArabic ? 'حالة صحية' : 'a medical condition');
   // Replace this local starter copy with the concise instruction returned by the LLM.
   const bystanderInstruction = t.alertSubtitle;
-  // Replace this local starter list with the extra guidance returned by the LLM.
-  const extraInstructions = [t.instructionOne, t.instructionTwo, t.instructionThree];
+  // The backend returns the model's numbered steps; the local copy is the
+  // fallback while they are still being generated or the server is offline.
+  const extraInstructions =
+    instructions && instructions.length > 0
+      ? instructions
+      : [t.instructionOne, t.instructionTwo, t.instructionThree];
 
   useEffect(() => {
     if (!isAlertActive) return;
@@ -983,13 +1089,27 @@ export default function MedicalAlertHome() {
   const [language, setLanguage] = useState<Language>('en');
   const [screen, setScreen] = useState<Screen>('setup');
   const [profile, setProfile] = useState<Profile>(DEFAULT_PROFILE);
+  const [userId, setUserId] = useState<string | null>(null);
+  const [emergency, setEmergency] = useState<EmergencyResponse | null>(null);
   const [photoMenuVisible, setPhotoMenuVisible] = useState(false);
   const [shakeEnabled, setShakeEnabled] = useState(false);
   const shakeTimesRef = useRef<number[]>([]);
   const lastMagnitudeRef = useRef<number | null>(null);
   const lastTriggerRef = useRef(0);
+  const openAlertRef = useRef<(id: string | null) => void>(() => {});
+  const userIdRef = useRef<string | null>(null);
+  userIdRef.current = userId;
   const colors = useColors();
   const t = copy[language];
+
+  const setupMutation = useSetupUser();
+  const emergencyMutation = useTriggerEmergency();
+  const profileQuery = useGetUser(userId ?? '', {
+    query: {
+      queryKey: getGetUserQueryKey(userId ?? ''),
+      enabled: Boolean(userId),
+    },
+  });
 
   useEffect(() => {
     if (!shakeEnabled) {
@@ -1018,7 +1138,7 @@ export default function MedicalAlertHome() {
       if (recentJolts.length >= 3 && cooldownElapsed) {
         lastTriggerRef.current = now;
         shakeTimesRef.current = [];
-        setScreen('alert');
+        openAlertRef.current(userIdRef.current);
         void Haptics.notificationAsync(Haptics.NotificationFeedbackType.Warning);
       }
     };
@@ -1060,11 +1180,14 @@ export default function MedicalAlertHome() {
   useEffect(() => {
     let active = true;
     const load = async () => {
-      const [storedProfile, storedLanguage] = await Promise.all([
+      const [storedProfile, storedLanguage, storedUserId] = await Promise.all([
         AsyncStorage.getItem(PROFILE_KEY),
         AsyncStorage.getItem(LANGUAGE_KEY),
+        AsyncStorage.getItem(USER_ID_KEY),
       ]);
       if (!active) return;
+      // The cached copy renders instantly and keeps the demo usable offline;
+      // the server profile replaces it as soon as the query resolves.
       if (storedProfile) {
         try {
           setProfile({ ...DEFAULT_PROFILE, ...JSON.parse(storedProfile) });
@@ -1076,12 +1199,47 @@ export default function MedicalAlertHome() {
       if (storedLanguage === 'ar' || storedLanguage === 'en') {
         setLanguage(storedLanguage);
       }
+      if (storedUserId) {
+        setUserId(storedUserId);
+        setScreen('alert');
+      }
     };
     void load();
     return () => {
       active = false;
     };
   }, []);
+
+  const serverProfile = profileQuery.data?.user;
+  useEffect(() => {
+    if (!serverProfile) return;
+    const next = toLocalProfile(serverProfile);
+    setProfile(next);
+    void AsyncStorage.setItem(PROFILE_KEY, JSON.stringify(next));
+  }, [serverProfile]);
+
+  /**
+   * Shows the emergency screen straight away, then asks the backend for the
+   * instructions and contact details. A failed request never blocks the
+   * screen: it falls back to the cached profile and the local call button.
+   */
+  const openAlert = useCallback(
+    (id: string | null) => {
+      setScreen('alert');
+      if (!id) return;
+      emergencyMutation.mutate(
+        { data: { userId: id } },
+        {
+          onSuccess: (response) => setEmergency(response),
+          onError: (error) => {
+            console.warn('[medical-alert] emergency trigger failed:', error);
+          },
+        },
+      );
+    },
+    [emergencyMutation],
+  );
+  openAlertRef.current = openAlert;
 
   const handleLanguageChange = (nextLanguage: Language) => {
     setLanguage(nextLanguage);
@@ -1139,17 +1297,36 @@ export default function MedicalAlertHome() {
       Alert.alert(t.required);
       return;
     }
+    if (!profile.photoUri) {
+      Alert.alert(t.photoRequired);
+      return;
+    }
     try {
-      await AsyncStorage.setItem(PROFILE_KEY, JSON.stringify(profile));
+      const photo = await toPhotoUpload(profile.photoUri);
+      const response = await setupMutation.mutateAsync({
+        data: {
+          photo,
+          name: profile.name.trim(),
+          condition: profile.condition.trim(),
+          language,
+          contactName: profile.contactName.trim(),
+          contactPhone: profile.contactPhone.trim(),
+          contactRelation: profile.contactRelation.trim(),
+        },
+      });
+
+      const saved = toLocalProfile(response.user);
+      setProfile(saved);
+      setUserId(response.user.id);
+      setEmergency(null);
+      await AsyncStorage.multiSet([
+        [USER_ID_KEY, response.user.id],
+        [PROFILE_KEY, JSON.stringify(saved)],
+      ]);
       await Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
-      setScreen('alert');
-    } catch {
-      Alert.alert(
-        language === 'ar' ? 'تعذر حفظ الملف' : 'Could not save profile',
-        language === 'ar'
-          ? 'حاول مرة أخرى.'
-          : 'Please try again.',
-      );
+      openAlert(response.user.id);
+    } catch (error) {
+      Alert.alert(t.saveFailed, describeApiError(error, language));
     }
   };
 
@@ -1203,14 +1380,17 @@ export default function MedicalAlertHome() {
   };
 
   const handleCall = async () => {
+    // The backend hands back a ready-to-dial URI; the typed number is the
+    // fallback when the emergency request has not resolved.
+    const telUri = emergency?.emergencyContact.telUri;
     const phone = profile.contactPhone.trim();
-    if (!phone) {
+    if (!telUri && !phone) {
       Alert.alert(t.callUnavailable);
       return;
     }
     await Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
     try {
-      await Linking.openURL(`tel:${phone.replace(/[^\d+]/g, '')}`);
+      await Linking.openURL(telUri ?? `tel:${phone.replace(/[^\d+]/g, '')}`);
     } catch {
       Alert.alert(
         language === 'ar' ? 'تعذر بدء الاتصال' : 'Could not start the call',
@@ -1229,12 +1409,18 @@ export default function MedicalAlertHome() {
     [language],
   );
 
+  const instructions = useMemo(
+    () => parseInstructions(emergency?.instructions ?? serverProfile?.instructions),
+    [emergency?.instructions, serverProfile?.instructions],
+  );
+
   return screen === 'setup' ? (
     <SetupScreen
       {...sharedProps}
       profile={profile}
       setProfile={setProfile}
       onSave={() => void handleSave()}
+      saving={setupMutation.isPending}
       shakeEnabled={shakeEnabled}
       onEnableShake={() => void handleEnableShake()}
       onChoosePhoto={() => void handleChoosePhoto()}
@@ -1247,6 +1433,7 @@ export default function MedicalAlertHome() {
       {...sharedProps}
       profile={profile}
       isAlertActive={screen === 'alert'}
+      instructions={instructions}
       onEdit={() => setScreen('setup')}
       onCall={() => void handleCall()}
     />
