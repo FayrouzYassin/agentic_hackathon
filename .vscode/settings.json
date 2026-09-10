@@ -1,0 +1,6 @@
+{
+  // Thunder Client reads collections from .vscode/thunder-tests/ only when this
+  // is on; without it the extension uses its own global storage and the
+  // committed "Medical Alert Backend" collection will not appear.
+  "thunder-client.saveToWorkspace": true
+}
