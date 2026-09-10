@@ -43,6 +43,135 @@ const DEFAULT_PROFILE: Profile = {
   contactPhone: '+20 10 5555 1488',
 };
 
+type ConditionDictionaryEntry = {
+  en: string;
+  ar: string;
+  aliases: readonly string[];
+};
+
+const CONDITION_DICTIONARY: readonly ConditionDictionaryEntry[] = [
+  {
+    en: 'Epilepsy',
+    ar: 'الصرع',
+    aliases: ['epilepsy', 'epileptic', 'seizure', 'seizures', 'seizure disorder', 'الصرع', 'نوبات الصرع', 'تشنجات'],
+  },
+  {
+    en: 'Diabetes',
+    ar: 'السكري',
+    aliases: ['diabetes', 'diabetic', 'type 1 diabetes', 'type 2 diabetes', 'السكري', 'داء السكري', 'السكر'],
+  },
+  {
+    en: 'Asthma',
+    ar: 'الربو',
+    aliases: ['asthma', 'asthmatic', 'الربو'],
+  },
+  {
+    en: 'Heart disease',
+    ar: 'أمراض القلب',
+    aliases: ['heart disease', 'heart condition', 'cardiac disease', 'أمراض القلب', 'مرض القلب'],
+  },
+  {
+    en: 'Allergy',
+    ar: 'الحساسية',
+    aliases: ['allergy', 'allergies', 'allergic reaction', 'الحساسية', 'حساسية'],
+  },
+  {
+    en: 'Migraine',
+    ar: 'الصداع النصفي',
+    aliases: ['migraine', 'migraines', 'الصداع النصفي', 'الشقيقة'],
+  },
+  {
+    en: "Alzheimer's disease",
+    ar: 'مرض الزهايمر',
+    aliases: ["alzheimer's", 'alzheimers', 'alzheimer disease', 'مرض الزهايمر', 'الزهايمر'],
+  },
+  {
+    en: "Parkinson's disease",
+    ar: 'مرض باركنسون',
+    aliases: ["parkinson's", 'parkinsons', 'parkinson disease', 'مرض باركنسون', 'باركنسون'],
+  },
+  {
+    en: 'Sickle cell disease',
+    ar: 'فقر الدم المنجلي',
+    aliases: ['sickle cell', 'sickle cell disease', 'فقر الدم المنجلي', 'الانيميا المنجلية'],
+  },
+  {
+    en: 'Kidney disease',
+    ar: 'أمراض الكلى',
+    aliases: ['kidney disease', 'renal disease', 'أمراض الكلى', 'مرض الكلى'],
+  },
+  {
+    en: 'Bleeding disorder',
+    ar: 'اضطراب النزيف',
+    aliases: ['bleeding disorder', 'hemophilia', 'haemophilia', 'اضطراب النزيف', 'الهيموفيليا'],
+  },
+  {
+    en: 'Low blood pressure',
+    ar: 'انخفاض ضغط الدم',
+    aliases: ['low blood pressure', 'hypotension', 'انخفاض ضغط الدم', 'الضغط المنخفض'],
+  },
+];
+
+function normalizeCondition(value: string) {
+  return value
+    .normalize('NFKC')
+    .toLocaleLowerCase()
+    .replace(/[\u064B-\u065F\u0670]/g, '')
+    .replace(/[أإآ]/g, 'ا')
+    .replace(/ى/g, 'ي')
+    .replace(/ة/g, 'ه')
+    .replace(/[^\p{L}\p{N}]+/gu, ' ')
+    .trim();
+}
+
+function editDistance(left: string, right: string) {
+  const leftCharacters = Array.from(left);
+  const rightCharacters = Array.from(right);
+  let previousRow = rightCharacters.map((_, index) => index);
+
+  for (let leftIndex = 0; leftIndex < leftCharacters.length; leftIndex += 1) {
+    const currentRow = [leftIndex + 1];
+    for (let rightIndex = 0; rightIndex < rightCharacters.length; rightIndex += 1) {
+      const insertion = currentRow[rightIndex] + 1;
+      const deletion = previousRow[rightIndex + 1] + 1;
+      const substitution =
+        previousRow[rightIndex] + (leftCharacters[leftIndex] === rightCharacters[rightIndex] ? 0 : 1);
+      currentRow.push(Math.min(insertion, deletion, substitution));
+    }
+    previousRow = currentRow;
+  }
+
+  return previousRow[rightCharacters.length];
+}
+
+function findConditionEntry(value: string) {
+  const normalizedValue = normalizeCondition(value);
+  if (!normalizedValue) return null;
+
+  let closest: { entry: ConditionDictionaryEntry; distance: number; length: number } | null = null;
+  for (const entry of CONDITION_DICTIONARY) {
+    const candidates = [entry.en, entry.ar, ...entry.aliases];
+    for (const candidate of candidates) {
+      const normalizedCandidate = normalizeCondition(candidate);
+      const distance = editDistance(normalizedValue, normalizedCandidate);
+      if (!closest || distance < closest.distance) {
+        closest = { entry, distance, length: Math.max(normalizedValue.length, normalizedCandidate.length) };
+      }
+      if (distance === 0) return entry;
+    }
+  }
+
+  if (!closest) return null;
+  const relativeDistance = closest.distance / Math.max(closest.length, 1);
+  const allowedDistance = closest.length <= 5 ? 1 : Math.max(2, Math.floor(closest.length * 0.28));
+  return closest.distance <= allowedDistance || relativeDistance <= 0.28 ? closest.entry : null;
+}
+
+function formatCondition(value: string, language: Language) {
+  const entry = findConditionEntry(value);
+  return entry ? entry[language] : value.trim();
+}
+
 const copy = {
   en: {
     appName: 'medical alert',
@@ -656,7 +785,9 @@ function AlertScreen({
   const isArabic = language === 'ar';
   const textAlign = isArabic ? 'right' : 'left';
 
-  const condition = profile.condition || (isArabic ? 'حالة صحية' : 'a medical condition');
+  const condition =
+    formatCondition(profile.condition, language) ||
+    (isArabic ? 'حالة صحية' : 'a medical condition');
   // Replace this local starter copy with the concise instruction returned by the LLM.
   const bystanderInstruction = t.alertSubtitle;
   // Replace this local starter list with the extra guidance returned by the LLM.
