@@ -47,3 +47,11 @@ Thumbs.db
 # Replit
 .cache/
 .local/
+
+﻿node_modules/
+.env
+*.env
+!.env.example
+uploads/
+npm-debug.log*
+86090b39007acc134bbdf0cf4d4c24258da3481f

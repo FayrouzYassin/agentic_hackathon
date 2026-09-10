@@ -1,0 +1,19 @@
+[
+  {
+    "_id": "b59c5b1b-d200-453d-86a6-8bd5c2c267fc",
+    "colName": "Medical Alert Backend",
+    "created": "2026-09-10T00:00:00.000Z",
+    "sortNum": 10000,
+    "folders": [],
+    "settings": {
+      "headers": [],
+      "auth": {
+        "type": "none"
+      },
+      "tests": [],
+      "options": {
+        "baseUrl": ""
+      }
+    }
+  }
+]

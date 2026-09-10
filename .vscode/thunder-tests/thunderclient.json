@@ -1,0 +1,85 @@
+[
+  {
+    "_id": "b1140b88-7876-429e-8352-302c17585db7",
+    "colId": "b59c5b1b-d200-453d-86a6-8bd5c2c267fc",
+    "containerId": "",
+    "name": "1. Create patient profile (form-data)",
+    "url": "http://localhost:5000/api/users/setup",
+    "method": "POST",
+    "sortNum": 10000,
+    "created": "2026-09-10T00:00:00.000Z",
+    "modified": "2026-09-10T00:00:00.000Z",
+    "headers": [],
+    "params": [],
+    "body": {
+      "type": "formdata",
+      "raw": "",
+      "form": [
+        {
+          "name": "name",
+          "value": "Demo Patient",
+          "isDisabled": false
+        },
+        {
+          "name": "condition",
+          "value": "Type 1 diabetes. Carries an insulin pen in her bag. Risk of hypoglycaemia.",
+          "isDisabled": false
+        },
+        {
+          "name": "language",
+          "value": "en",
+          "isDisabled": false
+        },
+        {
+          "name": "emergencyContact[name]",
+          "value": "Alex Haddad",
+          "isDisabled": false
+        },
+        {
+          "name": "emergencyContact[phone]",
+          "value": "+96170123456",
+          "isDisabled": false
+        },
+        {
+          "name": "emergencyContact[relation]",
+          "value": "Sister",
+          "isDisabled": false
+        }
+      ],
+      "files": [
+        {
+          "name": "photo",
+          "value": "c:\\Users\\ACER\\Desktop\\hackathon\\test-assets\\sample-photo.png"
+        }
+      ]
+    },
+    "tests": [],
+    "docs": "Creates a patient profile and asks Claude to generate bystander instructions.\n\nAll six text fields are required by middleware/validate.js:\n  name                        2-80 chars\n  condition                   5-1000 chars\n  language                    \"en\" or \"ar\" (optional, defaults to en)\n  emergencyContact[name]      2-80 chars\n  emergencyContact[phone]     phone number\n  emergencyContact[relation]  2-40 chars\n  photo                       required image file\n\nThe photo field points at test-assets/sample-photo.png in this repo.\nSwap it for any image you like.\n\nCopy `user.id` from the 201 response into request 2."
+  },
+  {
+    "_id": "27dd5f59-98a5-419b-9668-fa59627841d2",
+    "colId": "b59c5b1b-d200-453d-86a6-8bd5c2c267fc",
+    "containerId": "",
+    "name": "2. Trigger emergency (JSON)",
+    "url": "http://localhost:5000/api/emergency/trigger",
+    "method": "POST",
+    "sortNum": 20000,
+    "created": "2026-09-10T00:00:00.000Z",
+    "modified": "2026-09-10T00:00:00.000Z",
+    "headers": [
+      {
+        "name": "Content-Type",
+        "value": "application/json",
+        "isDisabled": false
+      }
+    ],
+    "params": [],
+    "body": {
+      "type": "json",
+      "raw": "{\n  \"userId\": \"PASTE_USER_ID_FROM_REQUEST_1\"\n}",
+      "form": []
+    },
+    "tests": [],
+    "docs": "Paste the `user.id` returned by request 1 into `userId`.\n\nIt must be a 24-character MongoDB ObjectId, otherwise validate.js rejects\nthe request with 400 before it reaches the controller.\n\nNote: the in-memory database is wiped every time you restart the server,\nso re-run request 1 after each restart to get a fresh id."
+  }
+]
